@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тренажер: Капитан 40 БТ</title>
+    <style>
+        :root {
+            --bg: #f0f2f5;
+            --card: #ffffff;
+            --primary: #0984e3;
+            --success: #00b894;
+            --error: #d63031;
+            --text: #2d3436;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        #quiz-app {
+            background: var(--card);
+            width: 100%;
+            max-width: 600px;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            font-weight: bold;
+            color: #636e72;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: #dfe6e9;
+            border-radius: 3px;
+            margin-bottom: 25px;
+            overflow: hidden;
+        }
+
+        #progress-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        #img-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            line-height: 1.5;
+            margin-bottom: 25px;
+        }
+
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 16px;
+            border: 2px solid #f1f2f6;
+            border-radius: 12px;
+            background: white;
+            cursor: pointer;
+            text-align: left;
+            font-size: 1rem;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .btn:hover:not(:disabled) {
+            border-color: var(--primary);
+            background: #f0f7ff;
+        }
+
+        .btn.correct {
+            background-color: var(--success) !important;
+            border-color: var(--success) !important;
+            color: white;
+        }
+
+        .btn.wrong {
+            background-color: var(--error) !important;
+            border-color: var(--error) !important;
+            color: white;
+        }
+
+        #result-screen {
+            display: none;
+            text-align: center;
+        }
+
+        .final-score {
+            font-size: 4rem;
+            font-weight: bold;
+            color: var(--primary);
+            margin: 20px 0;
+        }
+
+        .restart-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div id="quiz-app">
+    <div id="game-screen">
+        <div class="header">
+            <span>Вопрос <span id="current-idx">1</span> / <span id="total-count">0</span></span>
+            <span id="score-display">Счет: 0</span>
+        </div>
+        <div class="progress-bar">
+            <div id="progress-fill"></div>
+        </div>
+        
+        <div id="img-container"></div>
+        <h2 id="question-text">Загрузка вопросов...</h2>
+        
+        <div id="options-container" class="options"></div>
+    </div>
+
+    <div id="result-screen">
+        <h1>Тест завершен!</h1>
+        <div class="final-score" id="final-percent">0%</div>
+        <p id="final-stats"></p>
+        <button class="restart-btn" onclick="location.reload()">Начать заново</button>
+    </div>
+</div>
+
+<script>
+    let questions = [];
+    let currentStep = 0;
+    let score = 0;
+
+    // Загрузка данных из внешнего JSON
+    async function loadQuiz() {
+        try {
+            const response = await fetch('questions.json');
+            if (!response.ok) throw new Error('Сеть не отвечает');
+            const data = await response.json();
+            
+            // Перемешиваем вопросы сразу после загрузки
+            questions = data.sort(() => Math.random() - 0.5);
+            
+            document.getElementById('total-count').innerText = questions.length;
+            renderQuestion();
+        } catch (error) {
+            console.error('Ошибка:', error);
+            document.getElementById('question-text').innerText = 
+                'Ошибка загрузки questions.json. Убедитесь, что файл лежит в той же папке и вы используете локальный сервер.';
+        }
+    }
+
+    function renderQuestion() {
+        const q = questions[currentStep];
+        
+        // Обновляем прогресс и счетчик
+        document.getElementById('current-idx').innerText = currentStep + 1;
+        document.getElementById('progress-fill').style.width = `${(currentStep / questions.length) * 100}%`;
+
+        // Текст вопроса и картинка
+        document.getElementById('question-text').innerText = q.q;
+        const imgBox = document.getElementById('img-container');
+        // Картинки берутся из папки img/
+        imgBox.innerHTML = q.img ? `<img src="${q.img}" alt="Иллюстрация">` : '';
+
+        // Варианты ответов
+        const container = document.getElementById('options-container');
+        container.innerHTML = '';
+
+        q.a.forEach((ans, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.innerText = ans.t;
+            btn.onclick = () => handleAnswer(btn, ans.v);
+            container.appendChild(btn);
+        });
+    }
+
+    function handleAnswer(selectedBtn, isCorrect) {
+        const btns = document.querySelectorAll('.btn');
+        btns.forEach(b => b.disabled = true);
+
+        if (isCorrect) {
+            selectedBtn.classList.add('correct');
+            score++;
+            document.getElementById('score-display').innerText = `Счет: ${score}`;
+        } else {
+            selectedBtn.classList.add('wrong');
+            // Показываем правильный ответ
+            const correctIdx = questions[currentStep].a.findIndex(a => a.v);
+            btns[correctIdx].classList.add('correct');
+        }
+
+        setTimeout(() => {
+            currentStep++;
+            if (currentStep < questions.length) {
+                renderQuestion();
+            } else {
+                showResults();
+            }
+        }, 1200);
+    }
+
+    function showResults() {
+        document.getElementById('game-screen').style.display = 'none';
+        const resScreen = document.getElementById('result-screen');
+        resScreen.style.display = 'block';
+
+        const percent = Math.round((score / questions.length) * 100);
+        document.getElementById('final-percent').innerText = `${percent}%`;
+        document.getElementById('final-stats').innerText = 
+            `Правильных ответов: ${score} из ${questions.length}`;
+    }
+
+    loadQuiz();
+</script>
+</body>
+</html>
